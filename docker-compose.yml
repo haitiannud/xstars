@@ -1,0 +1,190 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8080
+    depends_on:
+      - api-gateway
+    volumes:
+      - ./frontend/web:/app
+      - /app/node_modules
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend/services/api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - USER_SERVICE_URL=http://user-service:8082
+      - CONTENT_SERVICE_URL=http://content-service:8083
+    depends_on:
+      - auth-service
+      - user-service
+      - content-service
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./backend/services/auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      - DATABASE_URL=postgresql://xstars:password@postgres:5432/xstars
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - postgres
+      - redis
+
+  # User Service
+  user-service:
+    build:
+      context: ./backend/services/user-service
+    ports:
+      - "8082:8082"
+    environment:
+      - DATABASE_URL=postgresql://xstars:password@postgres:5432/xstars
+    depends_on:
+      - postgres
+
+  # Content Service
+  content-service:
+    build:
+      context: ./backend/services/content-service
+    ports:
+      - "8083:8083"
+    environment:
+      - DATABASE_URL=postgresql://xstars:password@postgres:5432/xstars
+      - MONGODB_URL=mongodb://mongodb:27017/xstars
+    depends_on:
+      - postgres
+      - mongodb
+
+  # Streaming Service
+  streaming-service:
+    build:
+      context: ./backend/services/streaming-service
+    ports:
+      - "8084:8084"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MINIO_URL=http://minio:9000
+
+  # AI Service
+  ai-service:
+    build:
+      context: ./backend/services/ai-service
+    ports:
+      - "8085:8085"
+    environment:
+      - MODEL_PATH=/models
+    volumes:
+      - ./ai/models:/models
+
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=xstars
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=xstars
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # MongoDB
+  mongodb:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # Elasticsearch
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+  # Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+    depends_on:
+      - zookeeper
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    ports:
+      - "2181:2181"
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+
+  # MinIO (Object Storage)
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/monitoring/prometheus:/etc/prometheus
+
+  # Grafana
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
+  elasticsearch_data:
+  minio_data:
+  grafana_data:
